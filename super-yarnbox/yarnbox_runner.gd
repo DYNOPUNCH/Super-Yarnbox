@@ -9,12 +9,31 @@ enum nodeState
 	CLOSING
 }
 
+# Question data. using this as a glorified packet.
+class questionData:
+	var questionText = ""
+	var questionIndex = 0
+	
+	# Initialize a new question
+	func _init(_questionText: String = "", _questionIndex: int = 0):
+		questionText = _questionText
+		questionIndex = _questionIndex
+		
+	func getText():
+		return questionText
+	
+	func getIndex():
+		return questionIndex
+		
+
 # Properties
 var markerIndex: int = 0
 var dataArray: Array = []
 var nodeDictionary: Dictionary = {}
 var currentNodeState = nodeState.INACTIVE
 var declairedVariables = {}
+var questionsArray: Array = []
+var parentIndention = 0;
 
 var characterName = ""
 var dialogue = ""
@@ -107,6 +126,22 @@ func goToNode(targetNode: String):
 func continueLine():
 	markerIndex += 1
 	
+func processQuestions():
+	var tabCount = abs(dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t"))
+
+	# Detects if still in the question block or not
+	# Packs questions into question array
+	if(dataArray[markerIndex].find("->") != -1 || parentIndention != tabCount):
+		if(dataArray[markerIndex].find("->") != -1):
+			var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
+			questionsArray.push_back(questionData.new(strippedQuestion, markerIndex))
+			print(questionsArray[questionsArray.size() - 1].getText())
+			print(questionsArray[questionsArray.size() - 1].getIndex())
+		else:
+			print_rich("[color=red]ignored: [/color]" + dataArray[markerIndex])
+		
+		continueLine()	
+		processQuestions()
 
 func runDialogue(targetNode: String):
 	
@@ -117,36 +152,46 @@ func runDialogue(targetNode: String):
 			
 		nodeState.PROCESSING: 
 			
+			var splitLine;
+			
 			# Check if this line is the end.
 			if(dataArray[markerIndex].find("===") != -1):
 				currentNodeState = nodeState.CLOSING
 				return
 			
-			# Check if this is a regular line
+			# Clear character name.
+			characterName = ""
 			
-			var splitLine;
-			
+			# Detect a line with a name.
 			if(dataArray[markerIndex].find(":") != -1 && dataArray[markerIndex].find("Title") == -1):
 				splitLine = dataArray[markerIndex].split(":", true, 0)
 				characterName = splitLine[0].strip_edges()
 				dialogue = splitLine[1].strip_edges()
+			# Detect a node's title.
 			elif(dataArray[markerIndex].find("Title") != -1):
 				continueLine();
+			# Detect the beginning of a node
 			elif(dataArray[markerIndex].find("---") != -1):
 				continueLine();
+			# Detect any code blocks.
 			elif(dataArray[markerIndex].find("<<") != -1 && dataArray[markerIndex].find(">>") != -1):
 				if(dataArray[markerIndex].find("declare") != -1):
 					splitLine = dataArray[markerIndex].split("=", true, 0)
 					var variableName = splitLine[0].replace(" ", "").substr(splitLine[0].find("$"), splitLine[0].length() - 1)
 					var variableValue = splitLine[1].replace(" ", "").replace(">>", "")
-					print(variableValue)
-					declairedVariables[variableName] = 0
+					declairedVariables[variableName] = variableValue
 					continueLine();
+			# Process question and pause
+			elif(dataArray[markerIndex].find("->") != -1):
+				print_rich("[color=green]Processing questions...[/color]")
+				parentIndention = abs(dataArray[markerIndex - 1].count("    ") - dataArray[markerIndex - 1].count("\t"))
+				processQuestions()
+			# Detect blank lines
 			elif(dataArray[markerIndex] == ""):
 				continueLine();
+			# Default behavior. Just print the darn thing.
 			else:
 				dialogue = dataArray[markerIndex]
-			
 			
 		nodeState.CLOSING: 
 			print("closing")
