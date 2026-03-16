@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://bg6uni5r3awvt"]
+
+[ext_resource type="Script" uid="uid://ckej7dhne2bwu" path="res://yarnbox_runner.gd" id="1_glv2v"]
+
+[node name="Node2D" type="Node2D" unique_id=1645693083]
+
+[node name="YarnboxRunner" type="Node2D" parent="." unique_id=1040826948]
+script = ExtResource("1_glv2v")
+
+[node name="Label" type="Label" parent="." unique_id=67309449]
+offset_right = 40.0
+offset_bottom = 23.0
+text = "null"
