@@ -28,9 +28,7 @@ You walk together down the winding path.
 Traveler: I should warn you—there's trouble at the old bridge.
 
 -> Ask for details
-    <<set $trust += 1>>
-    <<set $trust += 1>>
-    <<set $trust += 1>>
+    <<set $trust -= 5>>
     Traveler: Bandits have been collecting "tolls." Unfair ones.
     <<if $trust >= 2>>
         Traveler: I know a secret path, if you're interested...
@@ -94,6 +92,7 @@ The bridge bandits block your path.
         You hand over the coins reluctantly.
     -> Fight!
         It's a tough fight, but you prevail.
+
 <<endif>>
 
 You cross the bridge and continue your journey.

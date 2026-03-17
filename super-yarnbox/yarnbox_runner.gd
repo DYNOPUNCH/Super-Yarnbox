@@ -14,6 +14,7 @@ enum nodeState
 class questionData:
 	var questionText = ""
 	var questionIndex = 0
+	var maxLines = 0
 	
 	# Initialize a new question
 	func _init(_questionText: String = "", _questionIndex: int = 0):
@@ -25,6 +26,12 @@ class questionData:
 	
 	func getIndex():
 		return questionIndex
+		
+	func setMaxLines(_maxLines):
+		maxLines = _maxLines
+		
+	func getMaxLines():
+		return maxLines
 
 class ifStatementData:
 	var leftVar = null
@@ -52,9 +59,10 @@ var currentNodeState = nodeState.INACTIVE
 var declairedVariables = {}
 var questionsArray: Array = []
 var parentIndention = 0
-var questionIndent = 0
 var characterName = ""
 var dialogue = ""
+var questionContinueHistory : Array = []
+var questionMaxLines : Array = []
 
 func dataStringContains(string: String):
 	if(dataArray[markerIndex].find(string) > -1):
@@ -138,13 +146,20 @@ func updateParentIndent():
 	parentIndention = abs(dataArray[markerIndex - 1].count("\t") - dataArray[markerIndex - 1].count("    "))
 
 func getCurrentIndent():
-	return dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t")
+	var line = dataArray[markerIndex]
+	var indent = 0
 
-func updateQuestionIndent():
-	questionIndent = dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t")
+	for i in line.length():
+		var char = line[i]
 
-func getQuestionIndent():
-	return questionIndent
+		if char == "\t":
+			indent += 1
+		elif char == " ":
+			indent += 0.25  # if 4 spaces = 1 indent
+		else:
+			break
+
+	return int(indent)
 
 # Indexes nodes to allow for quicker jumps.
 func indexNodes():
@@ -163,6 +178,10 @@ func goToNode(targetNode: String):
 		markerIndex = nodeDictionary[targetNode]
 		currentNodeState = nodeState.PROCESSING
 		print("going to: " + targetNode)
+		
+		#If you're doing a node jump then pop back that question history
+		questionMaxLines.pop_back()
+		questionContinueHistory.pop_back()
 
 func jumpToLine(targetLine: int):
 	if(targetLine <= dataArray.size()):
@@ -176,30 +195,47 @@ func continueLine():
 	dialogue = ""
 	markerIndex += 1
 	
+	# If there is a question history block then update that too
+	if(questionMaxLines.size() != 0):
+		questionMaxLines[questionMaxLines.size() - 1] -= 1
+		if(questionMaxLines[questionMaxLines.size() - 1] < 0):
+			questionMaxLines.pop_back()
+			jumpToLine(questionContinueHistory[questionContinueHistory.size() - 1])
+			questionContinueHistory.pop_back()
+		
+	
 func resetMarkerIndex():
 	markerIndex = 0
 
 func processQuestions():
-	# Before updating question indent let's first see if the next indent is less than or equal to the last indent
-	# If it's equal then find our new home, set questionIndent to 0, and then jump to that line
-	if(getQuestionIndent() < getParentIndent()):
-		while(getCurrentIndent() != 0):
-			continueLine()
-		return
+	var questionIndent = getCurrentIndent()
+	var questionMaxCounter = 0
 	
-	updateQuestionIndent()
-
 	# Collect questions (question block ends if we go back to parent indention
-	while(getCurrentIndent() > getParentIndent() || dataArray[markerIndex].contains("->")):
-		if(getCurrentIndent() == getQuestionIndent()):
-			var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
-			questionsArray.push_back(questionData.new(strippedQuestion, markerIndex))
+	while(getCurrentIndent() >= questionIndent):
+		print(getCurrentIndent())
+		
+		if(getCurrentIndent() == questionIndent):
+			if(dataArray[markerIndex].contains("->")):
+				var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
+				questionsArray.push_back(questionData.new(strippedQuestion, markerIndex))
+				if(questionsArray.size() > 0):
+					questionsArray[questionsArray.size() - 2].setMaxLines(questionMaxCounter)
+					questionMaxCounter = 0
+			else:
+				questionsArray[questionsArray.size() - 1].setMaxLines(questionMaxCounter)
+				break
+		else:
+			questionMaxCounter += 1
 		
 		continueLine()	
 	
+	questionContinueHistory.push_back(markerIndex)
+
 	#Debug print questions
 	for question in questionsArray:
 		print(question.getText())
+		print(question.getMaxLines())
 	
 	# Stop the node from proceeding until question is chosen
 	currentNodeState = nodeState.STOPPED
@@ -277,9 +313,11 @@ func chooseQuestion(chooseIndex):
 	
 	if(chooseIndex >= questionsArray.size()):
 		jumpToLine(questionsArray[questionsArray.size() - 1].getIndex())
+	else:
+		jumpToLine(questionsArray[chooseIndex].getIndex())
 	
+	questionMaxLines.push_back(questionsArray[chooseIndex].getMaxLines())
 	currentNodeState = nodeState.PROCESSING
-	jumpToLine(questionsArray[chooseIndex].getIndex())
 	continueLine()
 	questionsArray.clear()
 
@@ -291,6 +329,7 @@ func skipIfStatement():
 
 func runDialogue():
 	var line = dataArray[markerIndex]
+	
 	
 	match(currentNodeState):
 		
@@ -387,24 +426,29 @@ func runDialogue():
 							statements.push_back(ifStatementData.new(null, null, null, markerIndex, true))
 						
 						continueLine()
+						
+						# If there is a question history box then update that too but negatively this time
+						if(questionMaxLines.size() != 0):
+							questionMaxLines[questionMaxLines.size() - 1] += 1
+						
 						line = dataArray[markerIndex]
 					
 					# Test all if statements until you have a winner
 					for statement in statements:
 						print("Testing statement...")
+						
 						if(statement.elseFlag == true):
 							print("Defaulting to else")
 							jumpToLine(statement.getIndex())
 							break
 						
-						print(str(statement.leftVar, statement.operator, statement.rightVar))
-						
-						if(performIfStatement(statement.leftVar, statement.operator, statement.rightVar)):
-							print("Jumping to if block")
-							jumpToLine(statement.getIndex())
-							break
+						if(declairedVariables.has(statement.leftVar)):
+							if(performIfStatement(declairedVariables[statement.leftVar], statement.operator, statement.rightVar)):
+								print("Jumping to if block")
+								jumpToLine(statement.getIndex())
+								break
 					
-					# If there is no winnder continue on as if nothing happened...
+					# If there is no winner and no else statement continue on as if nothing happened...
 					
 				# continue line after any case.
 				continueLine();
@@ -414,7 +458,7 @@ func runDialogue():
 				processQuestions()
 			# Default behavior. Just print the darn thing.
 			else:
-				dialogue = dataArray[markerIndex]
+				dialogue = dataArray[markerIndex].strip_edges()
 			
 		nodeState.CLOSING: 
 			print("closing")
