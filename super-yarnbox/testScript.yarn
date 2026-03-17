@@ -29,6 +29,8 @@ Traveler: I should warn you—there's trouble at the old bridge.
 
 -> Ask for details
     <<set $trust += 1>>
+    <<set $trust += 1>>
+    <<set $trust += 1>>
     Traveler: Bandits have been collecting "tolls." Unfair ones.
     <<if $trust >= 2>>
         Traveler: I know a secret path, if you're interested...

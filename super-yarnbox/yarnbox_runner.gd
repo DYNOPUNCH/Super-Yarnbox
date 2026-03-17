@@ -25,7 +25,24 @@ class questionData:
 	
 	func getIndex():
 		return questionIndex
+
+class ifStatementData:
+	var leftVar = null
+	var rightVar = null
+	var operator = null
+	var index = null
+	var elseFlag = false
+	
+	# Initialize a new question
+	func _init(_leftVar = null, _rightVar = null, _operator = null, _index = 0, _elseFlag = false):
+		leftVar = _leftVar
+		rightVar = _rightVar
+		operator = _operator
+		index = _index
+		elseFlag = _elseFlag
 		
+	func getIndex():
+		return index
 
 # Properties
 var markerIndex: int = 0
@@ -35,10 +52,15 @@ var currentNodeState = nodeState.INACTIVE
 var declairedVariables = {}
 var questionsArray: Array = []
 var parentIndention = 0
-var chooseIndex = 0
-
+var questionIndent = 0
 var characterName = ""
 var dialogue = ""
+
+func dataStringContains(string: String):
+	if(dataArray[markerIndex].find(string) > -1):
+		return true
+	else:
+		return false
 
 # Checks if the yarn file is valid (simple method)
 func validYarnFileCheck(filename: String):
@@ -55,10 +77,10 @@ func validYarnFileCheck(filename: String):
 		var line = file.get_line()
 		if(line.to_lower().find("title") != -1):
 			hasTitle = true
-		if(line.to_lower().find("---") != -1):
+		if(line.to_lower().find("---") != -1 || line.to_lower().find("if")):
 			closedNodes += 1
 			hasTripleDash = true
-		if(line.to_lower().find("===") != -1):
+		if(line.to_lower().find("===") != -1 || line.to_lower().find("endif")):
 			closedNodes -= 1
 			hasTripleEqual = true
 
@@ -108,6 +130,22 @@ func printNodeTitles():
 		if(line.to_lower().find("title") != -1):
 			print_rich("[color=gray]node:[/color] " + line.substr(line.find(":") + 1, line.length() - 1).replace(" ", ""))
 
+# Returns indent before last tab block
+func getParentIndent():
+	return parentIndention
+	
+func updateParentIndent():
+	parentIndention = abs(dataArray[markerIndex - 1].count("\t") - dataArray[markerIndex - 1].count("    "))
+
+func getCurrentIndent():
+	return dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t")
+
+func updateQuestionIndent():
+	questionIndent = dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t")
+
+func getQuestionIndent():
+	return questionIndent
+
 # Indexes nodes to allow for quicker jumps.
 func indexNodes():
 	var indexNumber = 0
@@ -124,7 +162,7 @@ func goToNode(targetNode: String):
 	if(nodeDictionary.has(targetNode)):
 		markerIndex = nodeDictionary[targetNode]
 		currentNodeState = nodeState.PROCESSING
-		continueLine()
+		print("going to: " + targetNode)
 
 func jumpToLine(targetLine: int):
 	if(targetLine <= dataArray.size()):
@@ -138,27 +176,121 @@ func continueLine():
 	dialogue = ""
 	markerIndex += 1
 	
-func processQuestions():
-	var tabCount = abs(dataArray[markerIndex].count("    ") - dataArray[markerIndex].count("\t"))
+func resetMarkerIndex():
+	markerIndex = 0
 
-	# Detects if still in the question block or not
-	# Packs questions into question array
-	if(dataArray[markerIndex].find("->") != -1 || parentIndention != tabCount):
-		if(dataArray[markerIndex].find("->") != -1):
+func processQuestions():
+	# Before updating question indent let's first see if the next indent is less than or equal to the last indent
+	# If it's equal then find our new home, set questionIndent to 0, and then jump to that line
+	if(getQuestionIndent() < getParentIndent()):
+		while(getCurrentIndent() != 0):
+			continueLine()
+		return
+	
+	updateQuestionIndent()
+
+	# Collect questions (question block ends if we go back to parent indention
+	while(getCurrentIndent() > getParentIndent() || dataArray[markerIndex].contains("->")):
+		if(getCurrentIndent() == getQuestionIndent()):
 			var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
 			questionsArray.push_back(questionData.new(strippedQuestion, markerIndex))
 		
 		continueLine()	
-		processQuestions()
+	
+	#Debug print questions
+	for question in questionsArray:
+		print(question.getText())
+	
+	# Stop the node from proceeding until question is chosen
+	currentNodeState = nodeState.STOPPED
 
-func chooseQuestion():
-	#print("chose option: " + str(chooseIndex))
+func performOperation(leftVar: float, operator, rightVar: float):
+	match operator:
+		"=", "to":
+			return rightVar
+		"+=":
+			return leftVar + rightVar
+		"-=":
+			return leftVar - rightVar
+		"*=":
+			return leftVar * rightVar
+		"/=":
+			if(leftVar != 0 && rightVar != 0):
+				return leftVar / rightVar
+		_:
+			push_error("Unknown operator")
+			return leftVar
+
+func performIfStatement(leftVar, determanator, rightVar):
+	var left_num : float = 0
+	var right_num : float = 0
+	var numeric_comparison = false
+
+	# Attempt numeric conversion
+	if typeof(leftVar) in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+		if typeof(rightVar) in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+			# Try converting to float
+			left_num = float(str(leftVar))
+			right_num = float(str(rightVar))
+			numeric_comparison = true
+	else:
+		numeric_comparison = false
+
+	match determanator:
+		"==", "is":
+			return leftVar == rightVar
+		"!=":
+			return leftVar != rightVar
+		"<":
+			if numeric_comparison:
+				return left_num < right_num
+			else:
+				return str(leftVar) < str(rightVar)
+		">":
+			if numeric_comparison:
+				return left_num > right_num
+			else:
+				return str(leftVar) > str(rightVar)
+		"<=":
+			if numeric_comparison:
+				return left_num <= right_num
+			else:
+				return str(leftVar) <= str(rightVar)
+		">=":
+			if numeric_comparison:
+				return left_num >= right_num
+			else:
+				return str(leftVar) >= str(rightVar)
+		_:
+			push_error("Unknown operator: " + str(determanator))
+			return false
+
+func isStopped():
+	return currentNodeState == nodeState.STOPPED
+
+func getQuestions():
+	return questionsArray
+
+func chooseQuestion(chooseIndex):
+	if(questionsArray.size() == 0):
+		return
+	
+	if(chooseIndex >= questionsArray.size()):
+		jumpToLine(questionsArray[questionsArray.size() - 1].getIndex())
+	
 	currentNodeState = nodeState.PROCESSING
 	jumpToLine(questionsArray[chooseIndex].getIndex())
 	continueLine()
 	questionsArray.clear()
 
-func runDialogue(targetNode: String):
+func skipIfStatement():
+	while(markerIndex <= dataArray.size() && !dataArray[markerIndex].contains("endif")):
+		continueLine()
+	continueLine()
+	print("Skipped rest of block.")
+
+func runDialogue():
+	var line = dataArray[markerIndex]
 	
 	match(currentNodeState):
 		
@@ -173,48 +305,120 @@ func runDialogue(targetNode: String):
 			var splitLine;
 			
 			# Check if this line is the end.
-			if(dataArray[markerIndex].find("===") != -1):
+			if(line.contains("===") || markerIndex >= dataArray.size()):
 				currentNodeState = nodeState.CLOSING
 				return
 			
-
-			
 			# Detect a line with a name.
-			if(dataArray[markerIndex].find(":") != -1 && dataArray[markerIndex].find("Title") == -1):
-				splitLine = dataArray[markerIndex].split(":", true, 0)
+			if(line.contains(":") && !line.contains("title")):
+				splitLine = line.split(":", true, 0)
 				characterName = splitLine[0].strip_edges()
 				dialogue = splitLine[1].strip_edges()
 			# Detect a node's title.
-			elif(dataArray[markerIndex].find("Title") != -1):
-				continueLine();
+			elif(line.contains("title")):
+				continueLine()
+			# Skip comments of blank lines.	
+			elif(line == "" || line.contains("//")):
+				continueLine()
 			# Detect the beginning of a node
-			elif(dataArray[markerIndex].find("---") != -1):
+			elif(line.contains("---")):
 				continueLine();
 			# Detect any code blocks.
-			elif(dataArray[markerIndex].find("<<") != -1 && dataArray[markerIndex].find(">>") != -1):
-				if(dataArray[markerIndex].find("declare") != -1):
-					splitLine = dataArray[markerIndex].split("=", true, 0)
+			elif(line.contains("<<") && line.contains(">>")):
+				
+				# Creates a new defined variable
+				if(line.contains("declare")):
+					splitLine = line.split("=", true, 0)
 					var variableName = splitLine[0].replace(" ", "").substr(splitLine[0].find("$"), splitLine[0].length() - 1)
-					var variableValue = splitLine[1].replace(" ", "").replace(">>", "")
+					var variableValue = splitLine[1].replace(">>", "").replace(" ", "")
 					declairedVariables[variableName] = variableValue
-					continueLine();
-				elif(dataArray[markerIndex].find("set") != -1):
-					pass
-			# Process question and pause
-			elif(dataArray[markerIndex].find("->") != -1):
-				print_rich("[color=green]Processing questions...[/color]")
-				parentIndention = abs(dataArray[markerIndex - 1].count("    ") - dataArray[markerIndex - 1].count("\t"))
-				processQuestions()
-				currentNodeState = nodeState.STOPPED
-			# Detect blank lines
-			elif(dataArray[markerIndex] == ""):
+				if(line.contains("endif")):
+					continueLine()
+				if(line.contains("elif") || line.contains("else")):
+					print("skipping broken if statement...")
+					skipIfStatement()
+				# Jumps to a defined node line
+				elif(line.contains("jump")):
+					var jumpLocation = line.replace("jump", "").replace(" ", "")
+					jumpLocation = jumpLocation.replace("<<", "").replace(">>", "")
+					goToNode(jumpLocation)
+				# Sets a pre declaired varaible
+				elif(line.contains("set")):
+					while(line.contains("set")):
+						print("setting var...")
+						
+						# Get variable name
+						var variableExpression = line.replace("<<", "").replace(">>", "").replace("$", "").replace("set", "")
+						var variableParts = variableExpression.split(" ", false, 0)
+						
+						# Only execute if the variable exists.
+						if(declairedVariables.has(variableParts[0])):
+							var leftVar = int(declairedVariables[variableParts[0]])
+							var rightVar = int(variableParts[2])
+							var operator = variableParts[1]
+							declairedVariables[variableParts[0]] = performOperation(leftVar, operator, rightVar)
+						else:
+							print_rich("[color=red]varaible has not been declaired...[/color]")
+						
+						# Moves the line so we can check if the next line has a set varaible before returning.
+						continueLine();
+						line = dataArray[markerIndex]
+					return
+				# Determinates an if block.
+				elif(line.contains("if")):
+					var statements: Array = []
+					
+					# Collect all if statements in block
+					while(!line.contains("endif")):
+						var variableExpression = line.replace("<<", "").replace(">>", "").replace("$", "").replace("if", "").replace("elif", "")
+						var variableParts = variableExpression.split(" ", false, 0)
+						var leftVar = null
+						var rightVar = null
+						var operator = null
+						
+						if(variableParts.size() == 3):
+							leftVar = variableParts[0]
+							rightVar = variableParts[2]
+							operator = variableParts[1]
+							
+						if(line.contains("if") || line.contains("elif")):
+							statements.push_back(ifStatementData.new(leftVar, rightVar, operator, markerIndex, false))
+						elif(line.contains("else")):
+							statements.push_back(ifStatementData.new(null, null, null, markerIndex, true))
+						
+						continueLine()
+						line = dataArray[markerIndex]
+					
+					# Test all if statements until you have a winner
+					for statement in statements:
+						print("Testing statement...")
+						if(statement.elseFlag == true):
+							print("Defaulting to else")
+							jumpToLine(statement.getIndex())
+							break
+						
+						print(str(statement.leftVar, statement.operator, statement.rightVar))
+						
+						if(performIfStatement(statement.leftVar, statement.operator, statement.rightVar)):
+							print("Jumping to if block")
+							jumpToLine(statement.getIndex())
+							break
+					
+					# If there is no winnder continue on as if nothing happened...
+					
+				# continue line after any case.
 				continueLine();
+			# Process question and pause
+			elif(line.contains("->")):
+				updateParentIndent()
+				processQuestions()
 			# Default behavior. Just print the darn thing.
 			else:
 				dialogue = dataArray[markerIndex]
 			
 		nodeState.CLOSING: 
 			print("closing")
+			resetMarkerIndex()
 			currentNodeState = nodeState.INACTIVE
 			return;
 
@@ -231,24 +435,19 @@ func _ready() -> void:
 		
 	indexNodes()
 	
-	print(nodeDictionary["TravelTogether"])
-	
 	goToNode("Start")
-	
-
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
-	runDialogue("Start")
+func _process(_delta: float) -> void:
+	
+	runDialogue()
 	label.text = dialogue
 	label_2.text = characterName
 	
-	if(Input.is_action_just_pressed("Accept") && currentNodeState != nodeState.STOPPED):
-		#print("pressed")
+	if(Input.is_action_just_pressed("Accept") && !isStopped()):
 		continueLine()
+	
+	if(isStopped()):
 		
-	if(Input.is_action_just_pressed("Accept") && currentNodeState == nodeState.STOPPED):
-		#print("pressed")
-		#print(questionsArray[chooseIndex].getText() + " : " + str(questionsArray[chooseIndex].getIndex()))
-		chooseQuestion()
-		continueLine()
+		if(Input.is_action_just_pressed("Accept")):
+			chooseQuestion(0)
