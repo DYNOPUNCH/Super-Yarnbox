@@ -8,6 +8,15 @@
 script = ExtResource("1_glv2v")
 
 [node name="Label" type="Label" parent="." unique_id=67309449]
-offset_right = 40.0
-offset_bottom = 23.0
+offset_left = 2.0
+offset_top = 22.0
+offset_right = 42.0
+offset_bottom = 45.0
+text = "null"
+
+[node name="Label2" type="Label" parent="." unique_id=23618821]
+offset_left = 2.0
+offset_top = 1.0
+offset_right = 42.0
+offset_bottom = 24.0
 text = "null"

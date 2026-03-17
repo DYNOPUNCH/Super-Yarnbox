@@ -1,11 +1,12 @@
 extends Node2D
 @onready var label: Label = $"../Label"
+@onready var label_2: Label = $"../Label2"
 
 enum nodeState
 {
 	INACTIVE,
-	SEARCHING,
 	PROCESSING,
+	STOPPED,
 	CLOSING
 }
 
@@ -33,7 +34,8 @@ var nodeDictionary: Dictionary = {}
 var currentNodeState = nodeState.INACTIVE
 var declairedVariables = {}
 var questionsArray: Array = []
-var parentIndention = 0;
+var parentIndention = 0
+var chooseIndex = 0
 
 var characterName = ""
 var dialogue = ""
@@ -122,8 +124,18 @@ func goToNode(targetNode: String):
 	if(nodeDictionary.has(targetNode)):
 		markerIndex = nodeDictionary[targetNode]
 		currentNodeState = nodeState.PROCESSING
+		continueLine()
+
+func jumpToLine(targetLine: int):
+	if(targetLine <= dataArray.size()):
+		markerIndex = targetLine
+	else:
+		markerIndex = 0
 
 func continueLine():
+	# Clear character name and dialogue.
+	characterName = ""
+	dialogue = ""
 	markerIndex += 1
 	
 func processQuestions():
@@ -135,17 +147,23 @@ func processQuestions():
 		if(dataArray[markerIndex].find("->") != -1):
 			var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
 			questionsArray.push_back(questionData.new(strippedQuestion, markerIndex))
-			print(questionsArray[questionsArray.size() - 1].getText())
-			print(questionsArray[questionsArray.size() - 1].getIndex())
-		else:
-			print_rich("[color=red]ignored: [/color]" + dataArray[markerIndex])
 		
 		continueLine()	
 		processQuestions()
 
+func chooseQuestion():
+	#print("chose option: " + str(chooseIndex))
+	currentNodeState = nodeState.PROCESSING
+	jumpToLine(questionsArray[chooseIndex].getIndex())
+	continueLine()
+	questionsArray.clear()
+
 func runDialogue(targetNode: String):
 	
 	match(currentNodeState):
+		
+		nodeState.STOPPED:
+			return
 		
 		nodeState.INACTIVE: 
 			return
@@ -159,8 +177,7 @@ func runDialogue(targetNode: String):
 				currentNodeState = nodeState.CLOSING
 				return
 			
-			# Clear character name.
-			characterName = ""
+
 			
 			# Detect a line with a name.
 			if(dataArray[markerIndex].find(":") != -1 && dataArray[markerIndex].find("Title") == -1):
@@ -181,11 +198,14 @@ func runDialogue(targetNode: String):
 					var variableValue = splitLine[1].replace(" ", "").replace(">>", "")
 					declairedVariables[variableName] = variableValue
 					continueLine();
+				elif(dataArray[markerIndex].find("set") != -1):
+					pass
 			# Process question and pause
 			elif(dataArray[markerIndex].find("->") != -1):
 				print_rich("[color=green]Processing questions...[/color]")
 				parentIndention = abs(dataArray[markerIndex - 1].count("    ") - dataArray[markerIndex - 1].count("\t"))
 				processQuestions()
+				currentNodeState = nodeState.STOPPED
 			# Detect blank lines
 			elif(dataArray[markerIndex] == ""):
 				continueLine();
@@ -198,7 +218,7 @@ func runDialogue(targetNode: String):
 			currentNodeState = nodeState.INACTIVE
 			return;
 
-# Called when the node enters the scene tree for the first time.
+# Called when the node enters godot to string the scene tree for the first time.
 func _ready() -> void:
 	loadYarnFile("testScript.yarn")
 	
@@ -221,7 +241,14 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	runDialogue("Start")
 	label.text = dialogue
-	if(Input.is_action_just_pressed("Accept")):
-		print("pressed")
+	label_2.text = characterName
+	
+	if(Input.is_action_just_pressed("Accept") && currentNodeState != nodeState.STOPPED):
+		#print("pressed")
 		continueLine()
 		
+	if(Input.is_action_just_pressed("Accept") && currentNodeState == nodeState.STOPPED):
+		#print("pressed")
+		#print(questionsArray[chooseIndex].getText() + " : " + str(questionsArray[chooseIndex].getIndex()))
+		chooseQuestion()
+		continueLine()
