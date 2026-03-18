@@ -64,6 +64,11 @@ var dialogue = ""
 var questionContinueHistory : Array = []
 var questionMaxLines : Array = []
 
+# TODO: I'll come back for this. it's an optimization feature so it can come later
+# Convert all actions into dictionary look ups
+var actionsTable: Dictionary = {}
+var statementTable: Dictionary = {}
+
 func dataStringContains(string: String):
 	if(dataArray[markerIndex].find(string) > -1):
 		return true
@@ -130,6 +135,9 @@ func loadYarnFile(filename: String):
 		dataArray.append(line)
 	
 	file.close()
+	
+	indexNodes()
+	
 	return 1
 
 # Prints the node titles. (debugging purposes)
@@ -150,11 +158,9 @@ func getCurrentIndent():
 	var indent = 0
 
 	for i in line.length():
-		var char = line[i]
-
-		if char == "\t":
+		if line[i] == "\t":
 			indent += 1
-		elif char == " ":
+		elif line[i] == " ":
 			indent += 0.25  # if 4 spaces = 1 indent
 		else:
 			break
@@ -173,6 +179,8 @@ func indexNodes():
 			
 		indexNumber += 1
 
+# Goes to target node. 
+# If it doesn't exist it closes the dialogue out.
 func goToNode(targetNode: String):
 	if(nodeDictionary.has(targetNode)):
 		markerIndex = nodeDictionary[targetNode]
@@ -182,6 +190,8 @@ func goToNode(targetNode: String):
 		#If you're doing a node jump then pop back that question history
 		questionMaxLines.pop_back()
 		questionContinueHistory.pop_back()
+	else:
+		currentNodeState = nodeState.CLOSING
 
 func jumpToLine(targetLine: int):
 	if(targetLine <= dataArray.size()):
@@ -202,8 +212,7 @@ func continueLine():
 			questionMaxLines.pop_back()
 			jumpToLine(questionContinueHistory[questionContinueHistory.size() - 1])
 			questionContinueHistory.pop_back()
-		
-	
+
 func resetMarkerIndex():
 	markerIndex = 0
 
@@ -213,8 +222,6 @@ func processQuestions():
 	
 	# Collect questions (question block ends if we go back to parent indention
 	while(getCurrentIndent() >= questionIndent):
-		print(getCurrentIndent())
-		
 		if(getCurrentIndent() == questionIndent):
 			if(dataArray[markerIndex].contains("->")):
 				var strippedQuestion = dataArray[markerIndex].replace("->", "").strip_edges()
@@ -232,10 +239,9 @@ func processQuestions():
 	
 	questionContinueHistory.push_back(markerIndex)
 
-	#Debug print questions
+	# TODO: Debug print questions
 	for question in questionsArray:
 		print(question.getText())
-		print(question.getMaxLines())
 	
 	# Stop the node from proceeding until question is chosen
 	currentNodeState = nodeState.STOPPED
@@ -330,7 +336,6 @@ func skipIfStatement():
 func runDialogue():
 	var line = dataArray[markerIndex]
 	
-	
 	match(currentNodeState):
 		
 		nodeState.STOPPED:
@@ -349,12 +354,12 @@ func runDialogue():
 				return
 			
 			# Detect a line with a name.
-			if(line.contains(":") && !line.contains("title")):
+			if(line.contains(":") && !line.containsn("title")):
 				splitLine = line.split(":", true, 0)
 				characterName = splitLine[0].strip_edges()
 				dialogue = splitLine[1].strip_edges()
 			# Detect a node's title.
-			elif(line.contains("title")):
+			elif(line.containsn("title")):
 				continueLine()
 			# Skip comments of blank lines.	
 			elif(line == "" || line.contains("//")):
@@ -384,8 +389,6 @@ func runDialogue():
 				# Sets a pre declaired varaible
 				elif(line.contains("set")):
 					while(line.contains("set")):
-						print("setting var...")
-						
 						# Get variable name
 						var variableExpression = line.replace("<<", "").replace(">>", "").replace("$", "").replace("set", "")
 						var variableParts = variableExpression.split(" ", false, 0)
@@ -435,16 +438,12 @@ func runDialogue():
 					
 					# Test all if statements until you have a winner
 					for statement in statements:
-						print("Testing statement...")
-						
 						if(statement.elseFlag == true):
-							print("Defaulting to else")
 							jumpToLine(statement.getIndex())
 							break
 						
 						if(declairedVariables.has(statement.leftVar)):
 							if(performIfStatement(declairedVariables[statement.leftVar], statement.operator, statement.rightVar)):
-								print("Jumping to if block")
 								jumpToLine(statement.getIndex())
 								break
 					
@@ -462,6 +461,10 @@ func runDialogue():
 			
 		nodeState.CLOSING: 
 			print("closing")
+			dialogue = ""
+			characterName = ""
+			questionMaxLines.clear()
+			questionContinueHistory.clear()
 			resetMarkerIndex()
 			currentNodeState = nodeState.INACTIVE
 			return;
@@ -470,16 +473,7 @@ func runDialogue():
 func _ready() -> void:
 	loadYarnFile("testScript.yarn")
 	
-	# Unit Test 1 (Loads file): Passed
-	for i in dataArray:
-		print(i)
-	
-	# Unit Test 2 (Can print all node types): Passed
-	printNodeTitles()
-		
-	indexNodes()
-	
-	goToNode("Start")
+
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(_delta: float) -> void:
@@ -488,8 +482,11 @@ func _process(_delta: float) -> void:
 	label.text = dialogue
 	label_2.text = characterName
 	
-	if(Input.is_action_just_pressed("Accept") && !isStopped()):
-		continueLine()
+	if(Input.is_action_just_pressed("Accept")):
+		if(!isStopped()):
+			continueLine()
+		if(currentNodeState == nodeState.INACTIVE):
+			goToNode("Start")
 	
 	if(isStopped()):
 		
