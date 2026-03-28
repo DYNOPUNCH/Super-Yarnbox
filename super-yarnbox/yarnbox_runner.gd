@@ -66,14 +66,15 @@ var questionMaxLines : Array = []
 
 # TODO: I'll come back for this. it's an optimization feature so it can come later
 # Convert all actions into dictionary look ups
-var actionsTable: Dictionary = {}
-var statementTable: Dictionary = {}
+var actionsTable: Dictionary = {
+	"===" : tripleEquals()
+	
+}
 
-func dataStringContains(string: String):
-	if(dataArray[markerIndex].find(string) > -1):
-		return true
-	else:
-		return false
+func tripleEquals():
+	print("I did it.")
+
+var statementTable: Dictionary = {}
 
 # Checks if the yarn file is valid (simple method)
 func validYarnFileCheck(filename: String):
@@ -149,10 +150,12 @@ func printNodeTitles():
 # Returns indent before last tab block
 func getParentIndent():
 	return parentIndention
-	
+
+# Updates indent to the current indent
 func updateParentIndent():
 	parentIndention = abs(dataArray[markerIndex - 1].count("\t") - dataArray[markerIndex - 1].count("    "))
 
+# Returns indent of current line
 func getCurrentIndent():
 	var line = dataArray[markerIndex]
 	var indent = 0
@@ -193,12 +196,15 @@ func goToNode(targetNode: String):
 	else:
 		currentNodeState = nodeState.CLOSING
 
+# Goes to target line
+# If the line doesn't exist it closes the dialogue out
 func jumpToLine(targetLine: int):
 	if(targetLine <= dataArray.size()):
 		markerIndex = targetLine
 	else:
-		markerIndex = 0
+		currentNodeState = nodeState.CLOSING
 
+# Increments index marker and manages question history blocks
 func continueLine():
 	# Clear character name and dialogue.
 	characterName = ""
@@ -213,9 +219,11 @@ func continueLine():
 			jumpToLine(questionContinueHistory[questionContinueHistory.size() - 1])
 			questionContinueHistory.pop_back()
 
+# Resets index marker back to zero
 func resetMarkerIndex():
 	markerIndex = 0
 
+# Processes questions so that they can be used by the system
 func processQuestions():
 	var questionIndent = getCurrentIndent()
 	var questionMaxCounter = 0
@@ -246,6 +254,7 @@ func processQuestions():
 	# Stop the node from proceeding until question is chosen
 	currentNodeState = nodeState.STOPPED
 
+# Performs operations on string values.
 func performOperation(leftVar: float, operator, rightVar: float):
 	match operator:
 		"=", "to":
@@ -263,6 +272,7 @@ func performOperation(leftVar: float, operator, rightVar: float):
 			push_error("Unknown operator")
 			return leftVar
 
+# Performs operation on if statements in strings
 func performIfStatement(leftVar, determanator, rightVar):
 	var left_num : float = 0
 	var right_num : float = 0
@@ -307,12 +317,15 @@ func performIfStatement(leftVar, determanator, rightVar):
 			push_error("Unknown operator: " + str(determanator))
 			return false
 
+# Returns if the system has stopped or not
 func isStopped():
 	return currentNodeState == nodeState.STOPPED
 
+# Returns questions array
 func getQuestions():
 	return questionsArray
 
+# Submits returned question for the engine
 func chooseQuestion(chooseIndex):
 	if(questionsArray.size() == 0):
 		return
@@ -327,12 +340,14 @@ func chooseQuestion(chooseIndex):
 	continueLine()
 	questionsArray.clear()
 
+# Skips unbalanced if statement blocks (flow solution)
 func skipIfStatement():
 	while(markerIndex <= dataArray.size() && !dataArray[markerIndex].contains("endif")):
 		continueLine()
 	continueLine()
 	print("Skipped rest of block.")
 
+# The brains of the operation. This runs the loaded in dialog.
 func runDialogue():
 	var line = dataArray[markerIndex]
 	
