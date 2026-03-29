@@ -164,7 +164,7 @@ func getCurrentIndent():
 		if line[i] == "\t":
 			indent += 1
 		elif line[i] == " ":
-			indent += 0.25  # if 4 spaces = 1 indent
+			indent += 0.25  
 		else:
 			break
 
@@ -207,8 +207,6 @@ func jumpToLine(targetLine: int):
 # Increments index marker and manages question history blocks
 func continueLine():
 	# Clear character name and dialogue.
-	characterName = ""
-	dialogue = ""
 	markerIndex += 1
 	
 	# If there is a question history block then update that too
@@ -325,6 +323,18 @@ func isStopped():
 func getQuestions():
 	return questionsArray
 
+# Returns number of questions
+func getQuestionCount():
+	return questionsArray.size()
+
+# Returns who is speaking
+func getSpeaker():
+	return characterName
+
+# Returns the current dialogue
+func getDialogue():
+	return dialogue
+
 # Submits returned question for the engine
 func chooseQuestion(chooseIndex):
 	if(questionsArray.size() == 0):
@@ -349,6 +359,7 @@ func skipIfStatement():
 
 # The brains of the operation. This runs the loaded in dialog.
 func runDialogue():
+	
 	var line = dataArray[markerIndex]
 	
 	match(currentNodeState):
@@ -371,6 +382,8 @@ func runDialogue():
 			# Detect a line with a name.
 			if(line.contains(":") && !line.containsn("title")):
 				splitLine = line.split(":", true, 0)
+				characterName = ""
+				dialogue = ""
 				characterName = splitLine[0].strip_edges()
 				dialogue = splitLine[1].strip_edges()
 			# Detect a node's title.
@@ -472,6 +485,8 @@ func runDialogue():
 				processQuestions()
 			# Default behavior. Just print the darn thing.
 			else:
+				characterName = ""
+				dialogue = ""
 				dialogue = dataArray[markerIndex].strip_edges()
 			
 		nodeState.CLOSING: 
@@ -494,8 +509,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	
 	runDialogue()
-	label.text = dialogue
-	label_2.text = characterName
+	label.text = getDialogue()
+	label_2.text = getSpeaker()
 	
 	if(Input.is_action_just_pressed("Accept")):
 		if(!isStopped()):
@@ -504,6 +519,8 @@ func _process(_delta: float) -> void:
 			goToNode("Start")
 	
 	if(isStopped()):
+		
+		
 		
 		if(Input.is_action_just_pressed("Accept")):
 			chooseQuestion(0)
